@@ -26,8 +26,6 @@
 #include <QDebug>
 #include <functional>
 
-#define LAYOUT_DEBUG
-
 #ifdef LAYOUT_DEBUG
 #define DEBUG() qDebug()
 #else
@@ -450,11 +448,9 @@ FittingGridViewPrivate::FittingGridViewPrivate(FittingGridView *q)
 
 FittingGridViewPrivate::~FittingGridViewPrivate()
 {
-    qDeleteAll(rows);
-
-    foreach (QQuickItem *item, delegates) {
-        model->release(item);
-    }
+    clear();
+    if (ownModel)
+        delete model;
 }
 
 double FittingGridViewPrivate::layoutWidth() const
