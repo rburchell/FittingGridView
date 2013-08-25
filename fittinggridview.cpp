@@ -257,6 +257,8 @@ void FittingGridView::geometryChanged(const QRectF &newGeometry, const QRectF &o
     }
 }
 
+namespace {
+
 class LayoutRow
 {
 public:
@@ -432,6 +434,8 @@ void LayoutRow::displayChanged()
     m_displayHeight = 0;
 }
 
+}
+
 FittingGridViewPrivate::FittingGridViewPrivate(FittingGridView *q)
     : QObject(q)
     , q_ptr(q)
@@ -447,6 +451,10 @@ FittingGridViewPrivate::FittingGridViewPrivate(FittingGridView *q)
 FittingGridViewPrivate::~FittingGridViewPrivate()
 {
     qDeleteAll(rows);
+
+    foreach (QQuickItem *item, delegates) {
+        model->release(item);
+    }
 }
 
 double FittingGridViewPrivate::layoutWidth() const
@@ -496,6 +504,7 @@ QQuickItem *FittingGridViewPrivate::createItem(int index, bool asynchronous)
     }
 
     item->setParentItem(contentItem);
+    DEBUG() << "create delegate:" << index << item << item->implicitWidth() << item->implicitHeight();
     return item;
 }
 
@@ -560,6 +569,9 @@ void FittingGridViewPrivate::layout()
     if (layoutWidth() < 1 || displayWidth < 1 || viewportHeight < 1)
         return;
 
+    if (!pendingChanges.isEmpty())
+        DEBUG() << "layout: model changes:" << pendingChanges;
+
     // Process changes in the data and update existing rows. It's okay if this process
     // leaves gaps; they will be closed while recalculating row layouts
     foreach (const QQmlChangeSet::Remove &remove, pendingChanges.removes()) {
@@ -607,6 +619,9 @@ void FittingGridViewPrivate::layoutItems(double minY, double maxY)
     double y = 0;
     int firstRow = -1, lastRow = -1;
 
+    DEBUG() << "layout: position" << minY << "to" << maxY << "total" << model->count()
+            << "layoutWidth" << layoutWidth() << "displayWidth" << displayWidth;
+
     // Find existing rows within the range, and ensure positions of all existing rows up to there
     for (int ri = 0; lastRow < 0; ri++) {
         int rowFirst = ri ? (rows[ri-1]->last + 1) : 0;
@@ -627,6 +642,8 @@ void FittingGridViewPrivate::layoutItems(double minY, double maxY)
         row->displayY = y;
 
         if (!row->isPresentable()) {
+            DEBUG() << "layout: row" << ri << "for" << row->first << "to" << row->last << "still loading"
+                    << row->itemsLoading();
             // An unpresentable row must be between first and last, or it won't ever become presentable
             if (firstRow < 0)
                 firstRow = ri;
@@ -636,6 +653,9 @@ void FittingGridViewPrivate::layoutItems(double minY, double maxY)
 
         if (firstRow < 0 && (y + row->displayHeight()) >= minY)
             firstRow = ri;
+
+        DEBUG() << "layout: row" << ri << "for" << row->first << "to" << row->last << "y" << y
+                << "height" << row->displayHeight();
 
         y += row->displayHeight() + spacing;
 

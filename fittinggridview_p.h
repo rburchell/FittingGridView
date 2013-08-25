@@ -26,7 +26,9 @@
 #include <QtQml/private/qqmlguard_p.h>
 #include <QtQuick/private/qquickitemchangelistener_p.h>
 
-class LayoutRow;
+namespace {
+    class LayoutRow;
+}
 
 class FittingGridViewPrivate : public QObject, public QQuickItemChangeListener
 {
