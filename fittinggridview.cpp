@@ -210,6 +210,52 @@ void FittingGridView::setMaximumHeight(double maximumHeight)
     emit maximumHeightChanged();
 }
 
+int FittingGridView::currentIndex() const
+{
+    Q_D(const FittingGridView);
+    return d->currentIndex;
+}
+
+void FittingGridView::setCurrentIndex(int index)
+{
+    Q_D(FittingGridView);
+    d->applyPendingChanges();
+    if (d->currentIndex == index)
+        return;
+
+    if (isComponentComplete()) {
+        d->updateCurrent(index);
+    } else {
+        d->currentIndex = index;
+        emit currentIndexChanged();
+    }
+}
+
+QQuickItem *FittingGridView::currentItem() const
+{
+    Q_D(const FittingGridView);
+    return d->currentItem;
+}
+
+bool FittingGridView::incrementCurrentIndex()
+{
+    Q_D(FittingGridView);
+    if (currentIndex() < d->model->count() - 1) {
+        setCurrentIndex(currentIndex() + 1);
+        return true;
+    }
+    return false;
+}
+
+bool FittingGridView::decrementCurrentIndex()
+{
+    if (currentIndex() > 0) {
+        setCurrentIndex(currentIndex() - 1);
+        return true;
+    }
+    return false;
+}
+
 void FittingGridView::classBegin()
 {
     QQuickItem::classBegin();
@@ -233,6 +279,7 @@ void FittingGridView::componentComplete()
 
     d->layoutChanged();
     d->displayChanged();
+    d->updateCurrent(d->currentIndex);
 }
 
 void FittingGridView::updatePolish()
@@ -434,6 +481,30 @@ void LayoutRow::displayChanged()
 
 }
 
+bool FittingGridView::incrementCurrentRow()
+{
+    Q_D(FittingGridView);
+    int rowIndex = d->rowOf(currentIndex());
+    if (rowIndex >= 0 && rowIndex < d->rows.size() - 1)
+        setCurrentIndex(d->rows[rowIndex + 1]->first);
+    else
+        return incrementCurrentIndex();
+    return true;
+}
+
+bool FittingGridView::decrementCurrentRow()
+{
+    Q_D(FittingGridView);
+    int rowIndex = d->rowOf(currentIndex());
+    if (rowIndex < 0)
+        return decrementCurrentIndex();
+    else if (rowIndex)
+        setCurrentIndex(d->rows[rowIndex - 1]->first);
+    else
+        return false;
+    return true;
+}
+
 FittingGridViewPrivate::FittingGridViewPrivate(FittingGridView *q)
     : QObject(q)
     , q_ptr(q)
@@ -443,6 +514,8 @@ FittingGridViewPrivate::FittingGridViewPrivate(FittingGridView *q)
     , explicitLayoutWidth(0)
     , maximumHeight(300)
     , displayWidth(0)
+    , currentIndex(-1)
+    , currentItem(0)
 {
 }
 
@@ -480,6 +553,17 @@ void FittingGridViewPrivate::displayChanged()
         row->displayY = -1;
     }
     q->polish();
+}
+
+int FittingGridViewPrivate::rowOf(int index)
+{
+    for (int i = 0; i < rows.size(); i++) {
+        if (rows[i]->first <= index && rows[i]->last >= index)
+            return i;
+        else if (rows[i]->first > index)
+            break;
+    }
+    return -1;
 }
 
 QQuickItem *FittingGridViewPrivate::createItem(int index, bool asynchronous)
@@ -570,6 +654,8 @@ void FittingGridViewPrivate::layout()
 
     // Process changes in the data and update existing rows. It's okay if this process
     // leaves gaps; they will be closed while recalculating row layouts
+    bool currentChanged = false;
+    int newCurrentIndex = currentIndex;
     foreach (const QQmlChangeSet::Remove &remove, pendingChanges.removes()) {
         // Delete all rows after the removed index; recalculation is relatively cheap
         // and would almost always happen anyway.
@@ -585,6 +671,14 @@ void FittingGridViewPrivate::layout()
                 model->release(it.value());
             }
         );
+
+        if (newCurrentIndex >= remove.index) {
+            if (newCurrentIndex < remove.end())
+                newCurrentIndex = qMin(remove.index, model->count() - 1);
+            else
+                newCurrentIndex -= remove.count;
+            currentChanged  = true;
+        }
     }
 
     foreach (const QQmlChangeSet::Insert &insert, pendingChanges.inserts()) {
@@ -602,9 +696,16 @@ void FittingGridViewPrivate::layout()
 
         cachedItemAspect = updateIndexMap(cachedItemAspect, insert.index, insert.count);
         delegates = updateIndexMap(delegates, insert.index, insert.count);
+
+        if (newCurrentIndex >= insert.index) {
+            newCurrentIndex += insert.count;
+            currentChanged = true;
+        }
     }
 
     pendingChanges.clear();
+    if (currentChanged)
+        updateCurrent(newCurrentIndex);
 
     layoutItems(contentY, contentY + viewportHeight);
     updateContentSize();
@@ -700,6 +801,33 @@ void FittingGridViewPrivate::updateContentSize()
     flickable->setProperty("contentHeight", (model->count() / avg) * maximumHeight);
 }
 
+void FittingGridViewPrivate::updateCurrent(int index)
+{
+    Q_Q(FittingGridView);
+
+    int oldIndex = currentIndex;
+    QQuickItem *oldItem = currentItem;
+    currentIndex = index;
+
+    if (currentIndex < 0 || currentIndex >= model->count()) {
+        if (currentItem) {
+            model->release(currentItem);
+            currentItem = 0;
+        }
+    } else {
+        currentItem = createItem(currentIndex);
+        // Hold an extra reference to the current item
+        model->object(currentIndex);
+        if (oldItem && currentItem != oldItem)
+            model->release(oldItem);
+    }
+
+    if (oldIndex != currentIndex)
+        emit q->currentIndexChanged();
+    if (oldItem != currentItem)
+        emit q->currentItemChanged();
+}
+
 int FittingGridViewPrivate::maximumLoadingRowItems() const
 {
     return (layoutWidth() && maximumHeight) ? int(ceil(layoutWidth() / ((3.0/4.0) * maximumHeight))) : 6;
@@ -774,6 +902,13 @@ void FittingGridViewPrivate::applyPositions(LayoutRow *row, double y)
     }
 }
 
+void FittingGridViewPrivate::applyPendingChanges()
+{
+    Q_Q(FittingGridView);
+    if (q->isComponentComplete() && !pendingChanges.isEmpty())
+        layout();
+}
+
 void FittingGridViewPrivate::clear()
 {
     qDeleteAll(rows);
@@ -783,6 +918,10 @@ void FittingGridViewPrivate::clear()
     foreach (QQuickItem *item, delegates)
         model->release(item);
     delegates.clear();
+    if (currentItem) {
+        model->release(currentItem);
+        currentItem = 0;
+    }
 }
 
 void FittingGridViewPrivate::itemImplicitHeightChanged(QQuickItem *item)

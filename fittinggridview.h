@@ -61,6 +61,18 @@ public:
     double maximumHeight() const;
     void setMaximumHeight(double maximumHeight);
 
+    Q_PROPERTY(int currentIndex READ currentIndex WRITE setCurrentIndex NOTIFY currentIndexChanged)
+    int currentIndex() const;
+    void setCurrentIndex(int currentIndex);
+
+    Q_INVOKABLE bool incrementCurrentRow();
+    Q_INVOKABLE bool decrementCurrentRow();
+    Q_INVOKABLE bool incrementCurrentIndex();
+    Q_INVOKABLE bool decrementCurrentIndex();
+
+    Q_PROPERTY(QQuickItem *currentItem READ currentItem NOTIFY currentItemChanged)
+    QQuickItem *currentItem() const;
+
     virtual void classBegin();
     virtual void componentComplete();
 
@@ -71,6 +83,8 @@ signals:
     void spacingChanged();
     void layoutWidthChanged();
     void maximumHeightChanged();
+    void currentIndexChanged();
+    void currentItemChanged();
 
 public slots:
     void polish() { QQuickItem::polish(); }

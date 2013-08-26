@@ -50,8 +50,10 @@ public:
     int spacing;
     double explicitLayoutWidth;
     double maximumHeight;
-
     double displayWidth;
+
+    int currentIndex;
+    QQuickItem *currentItem;
 
     QQmlChangeSet pendingChanges;
     QList<LayoutRow*> rows;
@@ -62,12 +64,16 @@ public:
     double layoutWidth() const;
     void layoutChanged();
     void displayChanged();
+    void applyPendingChanges();
     void layout();
     void layoutItems(double minY, double maxY);
     void updateContentSize();
 
+    void updateCurrent(int index);
+
     void clear();
 
+    int rowOf(int index);
     QQuickItem *createItem(int index, bool asynchronous = false);
     double indexAspectRatio(int index);
     void updateItemSize(int index);
