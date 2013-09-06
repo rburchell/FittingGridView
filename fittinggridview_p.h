@@ -55,6 +55,9 @@ public:
     int currentIndex;
     QQuickItem *currentItem;
 
+    QQmlGuard<QQmlComponent> highlight;
+    QQuickItem *highlightItem;
+
     QQmlChangeSet pendingChanges;
     QList<LayoutRow*> rows;
 
@@ -69,6 +72,7 @@ public:
     void layoutItems(double minY, double maxY);
     void updateContentSize();
 
+    void createHighlight();
     void updateCurrent(int index);
 
     void clear();

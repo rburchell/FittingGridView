@@ -150,9 +150,16 @@ void FittingGridView::setFlickable(QQuickItem *flickable)
     if (flickable == d->flickable)
         return;
 
+    if (d->flickable) {
+        disconnect(d->flickable, 0, this, 0);
+    }
+
+    d->clear();
     d->flickable = flickable;
     d->contentItem = flickable->property("contentItem").value<QQuickItem*>();
-    flickable->setParentItem(this);
+
+    if (d->highlightItem)
+        d->highlightItem->setParentItem(d->contentItem);
 
     connect(flickable, SIGNAL(contentYChanged()), SLOT(polish()));
 
@@ -254,6 +261,32 @@ bool FittingGridView::decrementCurrentIndex()
         return true;
     }
     return false;
+}
+
+QQmlComponent *FittingGridView::highlight() const
+{
+    Q_D(const FittingGridView);
+    return d->highlight;
+}
+
+QQuickItem *FittingGridView::highlightItem() const
+{
+    Q_D(const FittingGridView);
+    return d->highlightItem;
+}
+
+void FittingGridView::setHighlight(QQmlComponent *component)
+{
+    Q_D(FittingGridView);
+    if (d->highlight == component)
+        return;
+
+    d->highlight = component;
+    if (isComponentComplete())
+        d->createHighlight();
+    polish();
+
+    emit highlightChanged();
 }
 
 void FittingGridView::classBegin()
@@ -516,6 +549,7 @@ FittingGridViewPrivate::FittingGridViewPrivate(FittingGridView *q)
     , displayWidth(0)
     , currentIndex(-1)
     , currentItem(0)
+    , highlightItem(0)
 {
 }
 
@@ -605,7 +639,12 @@ void FittingGridViewPrivate::createdItem(int index, QObject *object)
 void FittingGridViewPrivate::initItem(int index, QObject *object)
 {
     Q_UNUSED(index);
-    Q_UNUSED(object);
+
+    QQuickItem *item = qobject_cast<QQuickItem*>(object);
+    if (!item)
+        return;
+
+    item->setParentItem(contentItem);
 }
 
 void FittingGridViewPrivate::destroyingItem(QObject *object)
@@ -768,6 +807,17 @@ void FittingGridViewPrivate::layoutItems(double minY, double maxY)
             applyPositions(rows[i], rows[i]->displayY);
         }
 
+        if (highlight && !highlightItem)
+            createHighlight();
+
+        if (highlightItem) {
+            highlightItem->setVisible(currentItem != 0);
+            if (currentItem) {
+                highlightItem->setPosition(currentItem->position());
+                highlightItem->setSize(QSizeF(currentItem->width(), currentItem->height()));
+            }
+        }
+
         int firstIndex = rows[firstRow]->first;
         int lastIndex = rows[lastRow]->last;
         for (auto it = delegates.begin(); it != delegates.end(); ) {
@@ -822,10 +872,46 @@ void FittingGridViewPrivate::updateCurrent(int index)
             model->release(oldItem);
     }
 
+    q->polish();
+
     if (oldIndex != currentIndex)
         emit q->currentIndexChanged();
     if (oldItem != currentItem)
         emit q->currentItemChanged();
+}
+
+void FittingGridViewPrivate::createHighlight()
+{
+    Q_Q(FittingGridView);
+
+    if (highlightItem) {
+        highlightItem->deleteLater();
+        highlightItem = 0;
+    }
+
+    if (!highlight || !contentItem) {
+        emit q->highlightItemChanged();
+        return;
+    }
+
+    QQmlContext *creationContext = highlight->creationContext();
+    QQmlContext *context = new QQmlContext(creationContext ? creationContext : qmlContext(flickable));
+    QObject *nobj = highlight->beginCreate(context);
+    if (nobj) {
+        QQml_setParent_noEvent(context, nobj);
+        highlightItem = qobject_cast<QQuickItem*>(nobj);
+        if (!highlightItem)
+            delete nobj;
+    } else
+        delete context;
+
+    if (highlightItem) {
+        QQml_setParent_noEvent(highlightItem, contentItem);
+        highlightItem->setParentItem(contentItem);
+    }
+
+    highlight->completeCreate();
+    emit q->highlightItemChanged();
 }
 
 int FittingGridViewPrivate::maximumLoadingRowItems() const
@@ -921,6 +1007,12 @@ void FittingGridViewPrivate::clear()
     if (currentItem) {
         model->release(currentItem);
         currentItem = 0;
+    }
+    if (highlightItem) {
+        QQmlGuard<QQmlComponent> tmp = highlight;
+        highlight = 0;
+        createHighlight();
+        highlight = tmp;
     }
 }
 

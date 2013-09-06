@@ -73,6 +73,13 @@ public:
     Q_PROPERTY(QQuickItem *currentItem READ currentItem NOTIFY currentItemChanged)
     QQuickItem *currentItem() const;
 
+    Q_PROPERTY(QQmlComponent *highlight READ highlight WRITE setHighlight NOTIFY highlightChanged)
+    QQmlComponent *highlight() const;
+    void setHighlight(QQmlComponent *highlight);
+
+    Q_PROPERTY(QQuickItem *highlightItem READ highlightItem NOTIFY highlightItemChanged)
+    QQuickItem *highlightItem() const;
+
     virtual void classBegin();
     virtual void componentComplete();
 
@@ -85,6 +92,8 @@ signals:
     void maximumHeightChanged();
     void currentIndexChanged();
     void currentItemChanged();
+    void highlightChanged();
+    void highlightItemChanged();
 
 public slots:
     void polish() { QQuickItem::polish(); }
