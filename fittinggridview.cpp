@@ -312,6 +312,7 @@ void FittingGridView::componentComplete()
 
     d->layoutChanged();
     d->displayChanged();
+    d->applyPendingChanges();
     d->updateCurrent(d->currentIndex);
 }
 
@@ -688,64 +689,7 @@ void FittingGridViewPrivate::layout()
     if (layoutWidth() < 1 || displayWidth < 1 || viewportHeight < 1)
         return;
 
-    if (!pendingChanges.isEmpty())
-        DEBUG() << "layout: model changes:" << pendingChanges;
-
-    // Process changes in the data and update existing rows. It's okay if this process
-    // leaves gaps; they will be closed while recalculating row layouts
-    bool currentChanged = false;
-    int newCurrentIndex = currentIndex;
-    foreach (const QQmlChangeSet::Remove &remove, pendingChanges.removes()) {
-        // Delete all rows after the removed index; recalculation is relatively cheap
-        // and would almost always happen anyway.
-        while (!rows.isEmpty()) {
-            if (rows.last()->last < remove.index)
-                break;
-            delete rows.takeLast();
-        }
-
-        cachedItemAspect = updateIndexMap(cachedItemAspect, remove.index, -remove.count);
-        delegates = updateIndexMap(delegates, remove.index, -remove.count,
-            [this](decltype(delegates.constBegin()) it) {
-                model->release(it.value());
-            }
-        );
-
-        if (newCurrentIndex >= remove.index) {
-            if (newCurrentIndex < remove.end())
-                newCurrentIndex = qMin(remove.index, model->count() - 1);
-            else
-                newCurrentIndex -= remove.count;
-            currentChanged  = true;
-        }
-    }
-
-    foreach (const QQmlChangeSet::Insert &insert, pendingChanges.inserts()) {
-        foreach (LayoutRow *row, rows) {
-            // Row intersects with the insertion; all other rows are technically unchanged
-            if (row->first < insert.end() && row->last >= insert.index)
-                row->dataChanged();
-
-            // Layout will take care of fixing the row
-            if (row->first >= insert.index)
-                row->first += insert.count;
-            if (row->last >= insert.index)
-                row->last += insert.count;
-        }
-
-        cachedItemAspect = updateIndexMap(cachedItemAspect, insert.index, insert.count);
-        delegates = updateIndexMap(delegates, insert.index, insert.count);
-
-        if (newCurrentIndex >= insert.index) {
-            newCurrentIndex += insert.count;
-            currentChanged = true;
-        }
-    }
-
-    pendingChanges.clear();
-    if (currentChanged)
-        updateCurrent(newCurrentIndex);
-
+    applyPendingChanges();
     layoutItems(contentY, contentY + viewportHeight);
     updateContentSize();
 }
@@ -991,8 +935,69 @@ void FittingGridViewPrivate::applyPositions(LayoutRow *row, double y)
 void FittingGridViewPrivate::applyPendingChanges()
 {
     Q_Q(FittingGridView);
-    if (q->isComponentComplete() && !pendingChanges.isEmpty())
-        layout();
+    if (pendingChanges.isEmpty())
+        return;
+
+    DEBUG() << "layout: model changes:" << pendingChanges;
+
+    // Process changes in the data and update existing rows. It's okay if this process
+    // leaves gaps; they will be closed while recalculating row layouts
+    bool currentChanged = false;
+    int newCurrentIndex = currentIndex;
+    foreach (const QQmlChangeSet::Remove &remove, pendingChanges.removes()) {
+        // Delete all rows after the removed index; recalculation is relatively cheap
+        // and would almost always happen anyway.
+        while (!rows.isEmpty()) {
+            if (rows.last()->last < remove.index)
+                break;
+            delete rows.takeLast();
+        }
+
+        cachedItemAspect = updateIndexMap(cachedItemAspect, remove.index, -remove.count);
+        delegates = updateIndexMap(delegates, remove.index, -remove.count,
+            [this](decltype(delegates.constBegin()) it) {
+                model->release(it.value());
+            }
+        );
+
+        if (newCurrentIndex >= remove.index) {
+            if (newCurrentIndex < remove.end())
+                newCurrentIndex = qMin(remove.index, model->count() - 1);
+            else
+                newCurrentIndex -= remove.count;
+            currentChanged  = true;
+        }
+    }
+
+    foreach (const QQmlChangeSet::Insert &insert, pendingChanges.inserts()) {
+        foreach (LayoutRow *row, rows) {
+            // Row intersects with the insertion; all other rows are technically unchanged
+            if (row->first < insert.end() && row->last >= insert.index)
+                row->dataChanged();
+
+            // Layout will take care of fixing the row
+            if (row->first >= insert.index)
+                row->first += insert.count;
+            if (row->last >= insert.index)
+                row->last += insert.count;
+        }
+
+        cachedItemAspect = updateIndexMap(cachedItemAspect, insert.index, insert.count);
+        delegates = updateIndexMap(delegates, insert.index, insert.count);
+
+        if (newCurrentIndex >= insert.index) {
+            newCurrentIndex += insert.count;
+            currentChanged = true;
+        }
+    }
+
+    pendingChanges.clear();
+    if (currentChanged && q->isComponentComplete()) {
+        // Avoid changing indexes before they're evaluated for the first time
+        if (!currentItem)
+            newCurrentIndex = currentIndex;
+        updateCurrent(newCurrentIndex);
+    }
 }
 
 void FittingGridViewPrivate::clear()
