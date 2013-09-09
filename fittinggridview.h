@@ -80,6 +80,10 @@ public:
     Q_PROPERTY(QQuickItem *highlightItem READ highlightItem NOTIFY highlightItemChanged)
     QQuickItem *highlightItem() const;
 
+    Q_PROPERTY(int cacheBuffer READ cacheBuffer WRITE setCacheBuffer NOTIFY cacheBufferChanged)
+    int cacheBuffer() const;
+    void setCacheBuffer(int pixels);
+
     virtual void classBegin();
     virtual void componentComplete();
 
@@ -94,6 +98,7 @@ signals:
     void currentItemChanged();
     void highlightChanged();
     void highlightItemChanged();
+    void cacheBufferChanged();
 
 public slots:
     void polish() { QQuickItem::polish(); }

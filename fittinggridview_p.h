@@ -48,6 +48,7 @@ public:
     QQuickItem *contentItem;
 
     int spacing;
+    int cacheBuffer;
     double explicitLayoutWidth;
     double maximumHeight;
     double displayWidth;

@@ -289,6 +289,23 @@ void FittingGridView::setHighlight(QQmlComponent *component)
     emit highlightChanged();
 }
 
+int FittingGridView::cacheBuffer() const
+{
+    Q_D(const FittingGridView);
+    return d->cacheBuffer;
+}
+
+void FittingGridView::setCacheBuffer(int pixels)
+{
+    Q_D(FittingGridView);
+    if (d->cacheBuffer == pixels)
+        return;
+
+    d->cacheBuffer = pixels;
+    polish();
+    emit cacheBufferChanged();
+}
+
 void FittingGridView::classBegin()
 {
     QQuickItem::classBegin();
@@ -549,6 +566,7 @@ FittingGridViewPrivate::FittingGridViewPrivate(FittingGridView *q)
     , ownModel(false)
     , contentItem(0)
     , spacing(2)
+    , cacheBuffer(0)
     , explicitLayoutWidth(0)
     , maximumHeight(300)
     , displayWidth(0)
@@ -698,7 +716,7 @@ void FittingGridViewPrivate::layout()
         return;
 
     applyPendingChanges();
-    layoutItems(contentY, contentY + viewportHeight);
+    layoutItems(contentY - cacheBuffer, contentY + viewportHeight + cacheBuffer);
     updateContentSize();
 
     if (highlight && !highlightItem)
@@ -706,7 +724,6 @@ void FittingGridViewPrivate::layout()
 
     if (highlightItem) {
         highlightItem->setVisible(currentItem != 0);
-        DEBUG() << "layout: highlight" << highlightItem << currentItem << (currentItem ? currentItem->position() : QPointF());
         if (currentItem) {
             highlightItem->setPosition(currentItem->position());
             highlightItem->setSize(QSizeF(currentItem->width(), currentItem->height()));
