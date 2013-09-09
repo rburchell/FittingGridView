@@ -1015,9 +1015,12 @@ void FittingGridViewPrivate::applyPendingChanges()
 
         cachedItemAspect = updateIndexMap(cachedItemAspect, remove.index, -remove.count);
         delegates = updateIndexMap(delegates, remove.index, -remove.count,
-            [this](decltype(delegates.constBegin()) it) {
-                model->release(it.value());
-            }
+            // Explicit std::function construction necessary for gcc 4.6.4, for reasons unknown
+            std::function<void(QMap<int,QQuickItem*>::const_iterator)>(
+                [this](decltype(delegates.constBegin()) it) {
+                    model->release(it.value());
+                }
+            )
         );
 
         if (newCurrentIndex >= remove.index) {
