@@ -64,6 +64,9 @@ public:
     QMap<int,double> cachedItemAspect;
     QMap<int,QQuickItem*> delegates;
 
+    // Flag set by layout when no expensive operations (e.g. creating delegates) should be done
+    bool cachedLayoutOnly;
+
     double layoutWidth() const;
     void layoutChanged();
     void displayChanged();

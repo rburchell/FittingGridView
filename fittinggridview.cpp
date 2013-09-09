@@ -478,8 +478,12 @@ double LayoutRow::layoutHeight()
 
 double LayoutRow::displayHeight()
 {
-    if (!m_displayHeight)
-        m_displayHeight = calculateHeight(count(), view->displayWidth, aspect());
+    if (!m_displayHeight) {
+        if (isPresentable())
+            m_displayHeight = calculateHeight(count(), view->displayWidth, aspect());
+        else
+            m_displayHeight = view->maximumHeight;
+    }
     return m_displayHeight;
 }
 
@@ -551,6 +555,7 @@ FittingGridViewPrivate::FittingGridViewPrivate(FittingGridView *q)
     , currentIndex(-1)
     , currentItem(0)
     , highlightItem(0)
+    , cachedLayoutOnly(false)
 {
 }
 
@@ -609,6 +614,9 @@ QQuickItem *FittingGridViewPrivate::createItem(int index, bool asynchronous)
     QQuickItem *item = delegates.value(index);
     if (item)
         return item;
+
+    if (cachedLayoutOnly)
+        return 0;
 
     QObject *object = model->object(index, asynchronous);
     item = qmlobject_cast<QQuickItem*>(object);
@@ -692,22 +700,36 @@ void FittingGridViewPrivate::layout()
     applyPendingChanges();
     layoutItems(contentY, contentY + viewportHeight);
     updateContentSize();
+
+    if (highlight && !highlightItem)
+        createHighlight();
+
+    if (highlightItem) {
+        highlightItem->setVisible(currentItem != 0);
+        DEBUG() << "layout: highlight" << highlightItem << currentItem << (currentItem ? currentItem->position() : QPointF());
+        if (currentItem) {
+            highlightItem->setPosition(currentItem->position());
+            highlightItem->setSize(QSizeF(currentItem->width(), currentItem->height()));
+        }
+    }
 }
 
 void FittingGridViewPrivate::layoutItems(double minY, double maxY)
 {
     double y = 0;
-    int firstRow = -1, lastRow = -1;
+    int firstRow = -1, lastRow = -1, currentRow = -1;
 
     DEBUG() << "layout: position" << minY << "to" << maxY << "total" << model->count()
             << "layoutWidth" << layoutWidth() << "displayWidth" << displayWidth;
 
     // Find existing rows within the range, and ensure positions of all existing rows up to there
-    for (int ri = 0; lastRow < 0; ri++) {
+    // XXX This means all rows below lastRow have completely inconsistent data
+    for (int ri = 0; lastRow < 0 || (currentRow < 0 && currentIndex >= 0); ri++) {
         int rowFirst = ri ? (rows[ri-1]->last + 1) : 0;
         if (rowFirst >= model->count()) {
-            lastRow = ri - 1;
-            while (rows.size() - 1 > lastRow)
+            if (lastRow < 0)
+                lastRow = ri - 1;
+            while (rows.size() > ri)
                 delete rows.takeLast();
             break;
         }
@@ -718,54 +740,73 @@ void FittingGridViewPrivate::layoutItems(double minY, double maxY)
         }
 
         LayoutRow *row = rows[ri];
+
+        // Use maximumHeight when calculating if the current row is within minY to stay consistent
+        // with cachedLayoutOnly and avoid flipping delegates
+        if (firstRow < 0 && (y + maximumHeight) >= minY)
+            firstRow = ri;
+
+        // Do a cached-only layout for items we're not interested in displaying.
+        cachedLayoutOnly = (firstRow < 0 || lastRow >= 0);
+
         row->updateRow(rowFirst, model->count() - 1);
         row->displayY = y;
 
-        if (!row->isPresentable()) {
-            DEBUG() << "layout: row" << ri << "for" << row->first << "to" << row->last << "still loading"
-                    << row->itemsLoading();
-            // An unpresentable row must be between first and last, or it won't ever become presentable
-            if (firstRow < 0)
-                firstRow = ri;
-            lastRow = ri;
-            break;
+        if (row->first <= currentIndex && row->last >= currentIndex) {
+            // If the row was laid out with cachedLayoutOnly and isn't presentable,
+            // reset cachedLayoutOnly and lay out again as if data changed, because
+            // invalidation may not happen naturally when delegates are created via
+            // applyPositions.
+            if (cachedLayoutOnly) {
+                cachedLayoutOnly = false;
+                row->dataChanged();
+                row->updateRow(rowFirst, model->count() - 1);
+            }
+
+            // If it still contains currentIndex, set as currentRow
+            if (row->first <= currentIndex && row->last >= currentIndex)
+                currentRow = ri;
         }
 
-        if (firstRow < 0 && (y + row->displayHeight()) >= minY)
-            firstRow = ri;
+        if (!row->isPresentable()) {
+            if (!cachedLayoutOnly) {
+                DEBUG() << "layout: row" << ri << "for" << row->first << "to" << row->last << "still loading"
+                        << row->itemsLoading();
+            } else {
+                DEBUG() << "layout: row" << ri << "for" << row->first << "to" << row->last << "unpresentable at"
+                        << y;
+            }
+        } else {
+            DEBUG() << "layout: row" << ri << "for" << row->first << "to" << row->last << "y" << y
+                    << "height" << row->displayHeight();
+        }
 
-        DEBUG() << "layout: row" << ri << "for" << row->first << "to" << row->last << "y" << y
-                << "height" << row->displayHeight();
-
+        // The height of an unpresentable row is maximumHeight.
         y += row->displayHeight() + spacing;
 
-        if (y > maxY) {
+        if (y > maxY && lastRow < 0)
             lastRow = ri;
-            // XXX This means all rows below lastRow have completely inconsistent data
-            break;
-        }
     }
+
+    cachedLayoutOnly = false;
 
     if (firstRow >= 0 && lastRow >= 0) {
         for (int i = firstRow; i >= 0 && i <= lastRow; i++) {
             applyPositions(rows[i], rows[i]->displayY);
         }
 
-        if (highlight && !highlightItem)
-            createHighlight();
-
-        if (highlightItem) {
-            highlightItem->setVisible(currentItem != 0);
-            if (currentItem) {
-                highlightItem->setPosition(currentItem->position());
-                highlightItem->setSize(QSizeF(currentItem->width(), currentItem->height()));
-            }
+        if (currentRow >= 0 && (currentRow < firstRow || currentRow > lastRow)) {
+            applyPositions(rows[currentRow], rows[currentRow]->displayY);
         }
 
         int firstIndex = rows[firstRow]->first;
         int lastIndex = rows[lastRow]->last;
+        int firstCurrent = currentRow >= 0 ? rows[currentRow]->first : -1;
+        int lastCurrent = currentRow >= 0 ? rows[currentRow]->last : -1;
         for (auto it = delegates.begin(); it != delegates.end(); ) {
-            if (it.key() < firstIndex || it.key() > lastIndex) {
+            if ((it.key() < firstIndex || it.key() > lastIndex) &&
+                (it.key() < firstCurrent || it.key() > lastCurrent))
+            {
                 model->release(it.value());
                 it = delegates.erase(it);
             } else
@@ -907,6 +948,8 @@ void FittingGridViewPrivate::applyPositions(LayoutRow *row, double y)
                 continue;
 
             item->setVisible(false);
+            // Set Y to allow for approximate positioning of the current item
+            item->setY(y);
         }
         return;
     }
@@ -1034,3 +1077,4 @@ void FittingGridViewPrivate::itemImplicitWidthChanged(QQuickItem *item)
     if (index >= 0)
         updateItemSize(index);
 }
+
