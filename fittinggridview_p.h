@@ -52,6 +52,7 @@ public:
     double explicitLayoutWidth;
     double maximumHeight;
     double displayWidth;
+    double headerSize;
 
     int currentIndex;
     QQuickItem *currentItem;

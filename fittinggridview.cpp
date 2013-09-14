@@ -244,6 +244,23 @@ QQuickItem *FittingGridView::currentItem() const
     return d->currentItem;
 }
 
+double FittingGridView::headerSize() const
+{
+    Q_D(const FittingGridView);
+    return d->headerSize;
+}
+
+void FittingGridView::setHeaderSize(double v)
+{
+    Q_D(FittingGridView);
+    if (d->headerSize == v)
+        return;
+
+    d->headerSize = v;
+    polish();
+    emit headerSizeChanged();
+}
+
 bool FittingGridView::incrementCurrentIndex()
 {
     Q_D(FittingGridView);
@@ -570,6 +587,7 @@ FittingGridViewPrivate::FittingGridViewPrivate(FittingGridView *q)
     , explicitLayoutWidth(0)
     , maximumHeight(300)
     , displayWidth(0)
+    , headerSize(0)
     , currentIndex(-1)
     , currentItem(0)
     , highlightItem(0)
@@ -733,7 +751,7 @@ void FittingGridViewPrivate::layout()
 
 void FittingGridViewPrivate::layoutItems(double minY, double maxY)
 {
-    double y = 0;
+    double y = headerSize;
     int firstRow = -1, lastRow = -1, currentRow = -1;
 
     DEBUG() << "layout: position" << minY << "to" << maxY << "total" << model->count()

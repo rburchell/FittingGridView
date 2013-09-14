@@ -65,6 +65,10 @@ public:
     int currentIndex() const;
     void setCurrentIndex(int currentIndex);
 
+    Q_PROPERTY(double headerSize READ headerSize WRITE setHeaderSize NOTIFY headerSizeChanged)
+    double headerSize() const;
+    void setHeaderSize(double size);
+
     Q_INVOKABLE bool incrementCurrentRow();
     Q_INVOKABLE bool decrementCurrentRow();
     Q_INVOKABLE bool incrementCurrentIndex();
@@ -99,6 +103,7 @@ signals:
     void highlightChanged();
     void highlightItemChanged();
     void cacheBufferChanged();
+    void headerSizeChanged();
 
 public slots:
     void polish() { QQuickItem::polish(); }
