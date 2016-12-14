@@ -1,4 +1,4 @@
-import ".." 1.0
+import FittingGridView 1.0
 import QtQuick 2.6
 
 FittingGridView {
