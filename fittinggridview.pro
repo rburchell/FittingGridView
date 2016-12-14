@@ -1,6 +1,6 @@
 TEMPLATE = lib
 TARGET = FittingGridView
-QT += qml quick quick-private qml-private v8-private core-private gui-private
+QT += qml quick quick-private qml-private core-private gui-private
 CONFIG += qt plugin c++11
 
 TARGET = $$qtLibraryTarget($$TARGET)

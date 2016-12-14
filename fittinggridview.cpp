@@ -1022,7 +1022,7 @@ void FittingGridViewPrivate::applyPendingChanges()
     // leaves gaps; they will be closed while recalculating row layouts
     bool currentChanged = false;
     int newCurrentIndex = currentIndex;
-    foreach (const QQmlChangeSet::Remove &remove, pendingChanges.removes()) {
+    foreach (const QQmlChangeSet::Change &remove, pendingChanges.removes()) {
         // Delete all rows after the removed index; recalculation is relatively cheap
         // and would almost always happen anyway.
         while (!rows.isEmpty()) {
@@ -1050,7 +1050,7 @@ void FittingGridViewPrivate::applyPendingChanges()
         }
     }
 
-    foreach (const QQmlChangeSet::Insert &insert, pendingChanges.inserts()) {
+    foreach (const QQmlChangeSet::Change &insert, pendingChanges.inserts()) {
         foreach (LayoutRow *row, rows) {
             // Row intersects with the insertion; all other rows are technically unchanged
             if (row->first < insert.end() && row->last >= insert.index)
